@@ -1,0 +1,47 @@
+name: ${APPLICATION_NAME}
+
+services:
+  django:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${DJANGO_PORT}:${DJANGO_PORT}"
+    volumes:
+      - ../:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+      cd /app/django_app &&
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate &&
+      python manage.py runserver 0.0.0.0:${DJANGO_PORT}"
+    healthcheck:
+      test: /bin/bash -c "timeout 1 bash -c '</dev/tcp/localhost/${DJANGO_PORT}' 2>/dev/null"
+      interval: 5s
+      timeout: 5s
+      retries: 100
+
+
+  db:
+    image: postgres:13
+    container_name: ${DB_HOST}
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./database.sql:/docker-entrypoint-initdb.d/dump_file.sql
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    healthcheck:
+      test: "PGPASSWORD=${POSTGRES_PASSWORD} pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+      interval: 3s
+      timeout: 3s
+      retries: 100
+
+volumes:
+  postgres_data:
